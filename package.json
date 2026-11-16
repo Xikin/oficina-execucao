@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@types/newrelic": "^9.14.8",
-    "@types/node": "^24.19.2",
+    "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^2.1.8",
     "prettier": "^3.9.5",
     "prisma": "^5.22.0",
