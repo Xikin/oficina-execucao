@@ -1,0 +1,4443 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Oficina Mecânica — Execução e Produção",
+    "version": "1.0.0",
+    "description": "Fila de diagnóstico e reparo, catálogo de serviços e estoque de peças. Participa da saga de atendimento recebendo comandos e publicando eventos no RabbitMQ."
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {}
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Liveness",
+        "tags": [
+          "Saúde"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "summary": "Readiness — banco acessível",
+        "tags": [
+          "Saúde"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/execucoes/": {
+      "get": {
+        "summary": "Fila de execução",
+        "tags": [
+          "Fila de execução"
+        ],
+        "description": "Sem filtro, mostra só o que está em andamento: primeiro o que está em reparo, depois em diagnóstico, aguardando reparo e na fila; dentro de cada grupo, a mais antiga primeiro.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "minimum": 0,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "minimum": 0,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "NA_FILA",
+                "EM_DIAGNOSTICO",
+                "DIAGNOSTICADA",
+                "AGUARDANDO_REPARO",
+                "EM_REPARO",
+                "FINALIZADA",
+                "FALHOU",
+                "CANCELADA"
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "ordemId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "sagaId": {
+                            "type": "string"
+                          },
+                          "numeroOS": {
+                            "type": "integer"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "descricao": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "veiculoPlaca": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "veiculoMarca": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "veiculoModelo": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "veiculoAno": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "observacaoDiagnostico": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "motivoEncerramento": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "tempoRealMin": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "diagnosticoIniciadoEm": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "diagnosticadaEm": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "liberadaEm": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "reparoIniciadoEm": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "finalizadaEm": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "encerradaEm": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "criadoEm": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "atualizadoEm": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "servicos": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "servicoId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "nome": {
+                                  "type": "string"
+                                },
+                                "preco": {
+                                  "type": "number"
+                                },
+                                "tempoReal": {
+                                  "type": "integer",
+                                  "nullable": true
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "servicoId",
+                                "nome",
+                                "preco",
+                                "tempoReal"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "reservas": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "pecaId": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "nome": {
+                                  "type": "string"
+                                },
+                                "quantidade": {
+                                  "type": "integer"
+                                },
+                                "precoUnitario": {
+                                  "type": "number"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "RESERVADA",
+                                    "CONSUMIDA",
+                                    "LIBERADA"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "pecaId",
+                                "nome",
+                                "quantidade",
+                                "precoUnitario",
+                                "status"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "historico": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "statusAnterior": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "statusNovo": {
+                                  "type": "string"
+                                },
+                                "observacao": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "criadoEm": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "statusAnterior",
+                                "statusNovo",
+                                "observacao",
+                                "criadoEm"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "ordemId",
+                          "sagaId",
+                          "numeroOS",
+                          "status",
+                          "descricao",
+                          "veiculoPlaca",
+                          "veiculoMarca",
+                          "veiculoModelo",
+                          "veiculoAno",
+                          "observacaoDiagnostico",
+                          "motivoEncerramento",
+                          "tempoRealMin",
+                          "diagnosticoIniciadoEm",
+                          "diagnosticadaEm",
+                          "liberadaEm",
+                          "reparoIniciadoEm",
+                          "finalizadaEm",
+                          "encerradaEm",
+                          "criadoEm",
+                          "atualizadoEm",
+                          "servicos",
+                          "reservas",
+                          "historico"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "totalPages": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "page",
+                        "limit",
+                        "total",
+                        "totalPages"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execucoes/{id}": {
+      "get": {
+        "summary": "Buscar execução",
+        "tags": [
+          "Fila de execução"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "ordemId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "sagaId": {
+                      "type": "string"
+                    },
+                    "numeroOS": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoPlaca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoMarca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoModelo": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoAno": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "observacaoDiagnostico": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "motivoEncerramento": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "tempoRealMin": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "diagnosticoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "diagnosticadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "liberadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "reparoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "finalizadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "encerradaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "servicos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "servicoId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "preco": {
+                            "type": "number"
+                          },
+                          "tempoReal": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "servicoId",
+                          "nome",
+                          "preco",
+                          "tempoReal"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "reservas": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "pecaId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "quantidade": {
+                            "type": "integer"
+                          },
+                          "precoUnitario": {
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "RESERVADA",
+                              "CONSUMIDA",
+                              "LIBERADA"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "pecaId",
+                          "nome",
+                          "quantidade",
+                          "precoUnitario",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "historico": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "statusAnterior": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "statusNovo": {
+                            "type": "string"
+                          },
+                          "observacao": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "criadoEm": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "statusAnterior",
+                          "statusNovo",
+                          "observacao",
+                          "criadoEm"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "ordemId",
+                    "sagaId",
+                    "numeroOS",
+                    "status",
+                    "descricao",
+                    "veiculoPlaca",
+                    "veiculoMarca",
+                    "veiculoModelo",
+                    "veiculoAno",
+                    "observacaoDiagnostico",
+                    "motivoEncerramento",
+                    "tempoRealMin",
+                    "diagnosticoIniciadoEm",
+                    "diagnosticadaEm",
+                    "liberadaEm",
+                    "reparoIniciadoEm",
+                    "finalizadaEm",
+                    "encerradaEm",
+                    "criadoEm",
+                    "atualizadoEm",
+                    "servicos",
+                    "reservas",
+                    "historico"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execucoes/ordem/{ordemId}": {
+      "get": {
+        "summary": "Buscar execução pela OS",
+        "tags": [
+          "Fila de execução"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "ordemId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "ordemId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "sagaId": {
+                      "type": "string"
+                    },
+                    "numeroOS": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoPlaca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoMarca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoModelo": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoAno": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "observacaoDiagnostico": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "motivoEncerramento": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "tempoRealMin": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "diagnosticoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "diagnosticadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "liberadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "reparoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "finalizadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "encerradaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "servicos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "servicoId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "preco": {
+                            "type": "number"
+                          },
+                          "tempoReal": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "servicoId",
+                          "nome",
+                          "preco",
+                          "tempoReal"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "reservas": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "pecaId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "quantidade": {
+                            "type": "integer"
+                          },
+                          "precoUnitario": {
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "RESERVADA",
+                              "CONSUMIDA",
+                              "LIBERADA"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "pecaId",
+                          "nome",
+                          "quantidade",
+                          "precoUnitario",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "historico": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "statusAnterior": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "statusNovo": {
+                            "type": "string"
+                          },
+                          "observacao": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "criadoEm": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "statusAnterior",
+                          "statusNovo",
+                          "observacao",
+                          "criadoEm"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "ordemId",
+                    "sagaId",
+                    "numeroOS",
+                    "status",
+                    "descricao",
+                    "veiculoPlaca",
+                    "veiculoMarca",
+                    "veiculoModelo",
+                    "veiculoAno",
+                    "observacaoDiagnostico",
+                    "motivoEncerramento",
+                    "tempoRealMin",
+                    "diagnosticoIniciadoEm",
+                    "diagnosticadaEm",
+                    "liberadaEm",
+                    "reparoIniciadoEm",
+                    "finalizadaEm",
+                    "encerradaEm",
+                    "criadoEm",
+                    "atualizadoEm",
+                    "servicos",
+                    "reservas",
+                    "historico"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execucoes/{id}/diagnostico/iniciar": {
+      "post": {
+        "summary": "Iniciar diagnóstico",
+        "tags": [
+          "Fila de execução"
+        ],
+        "description": "Na fila → em diagnóstico. Avisa o OS Service, que muda a OS para Em Diagnóstico.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "ordemId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "sagaId": {
+                      "type": "string"
+                    },
+                    "numeroOS": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoPlaca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoMarca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoModelo": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoAno": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "observacaoDiagnostico": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "motivoEncerramento": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "tempoRealMin": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "diagnosticoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "diagnosticadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "liberadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "reparoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "finalizadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "encerradaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "servicos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "servicoId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "preco": {
+                            "type": "number"
+                          },
+                          "tempoReal": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "servicoId",
+                          "nome",
+                          "preco",
+                          "tempoReal"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "reservas": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "pecaId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "quantidade": {
+                            "type": "integer"
+                          },
+                          "precoUnitario": {
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "RESERVADA",
+                              "CONSUMIDA",
+                              "LIBERADA"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "pecaId",
+                          "nome",
+                          "quantidade",
+                          "precoUnitario",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "historico": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "statusAnterior": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "statusNovo": {
+                            "type": "string"
+                          },
+                          "observacao": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "criadoEm": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "statusAnterior",
+                          "statusNovo",
+                          "observacao",
+                          "criadoEm"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "ordemId",
+                    "sagaId",
+                    "numeroOS",
+                    "status",
+                    "descricao",
+                    "veiculoPlaca",
+                    "veiculoMarca",
+                    "veiculoModelo",
+                    "veiculoAno",
+                    "observacaoDiagnostico",
+                    "motivoEncerramento",
+                    "tempoRealMin",
+                    "diagnosticoIniciadoEm",
+                    "diagnosticadaEm",
+                    "liberadaEm",
+                    "reparoIniciadoEm",
+                    "finalizadaEm",
+                    "encerradaEm",
+                    "criadoEm",
+                    "atualizadoEm",
+                    "servicos",
+                    "reservas",
+                    "historico"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execucoes/{id}/diagnostico/concluir": {
+      "post": {
+        "summary": "Concluir diagnóstico com os itens do orçamento",
+        "tags": [
+          "Fila de execução"
+        ],
+        "description": "Reserva as peças no estoque (falha com 400 se faltar) e envia os itens para o orçamento.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "servicos": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "servicoId": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      },
+                      "required": [
+                        "servicoId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "default": []
+                  },
+                  "pecas": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "pecaId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "quantidade": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "pecaId",
+                        "quantidade"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "default": []
+                  },
+                  "observacao": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "ordemId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "sagaId": {
+                      "type": "string"
+                    },
+                    "numeroOS": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoPlaca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoMarca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoModelo": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoAno": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "observacaoDiagnostico": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "motivoEncerramento": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "tempoRealMin": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "diagnosticoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "diagnosticadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "liberadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "reparoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "finalizadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "encerradaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "servicos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "servicoId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "preco": {
+                            "type": "number"
+                          },
+                          "tempoReal": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "servicoId",
+                          "nome",
+                          "preco",
+                          "tempoReal"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "reservas": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "pecaId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "quantidade": {
+                            "type": "integer"
+                          },
+                          "precoUnitario": {
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "RESERVADA",
+                              "CONSUMIDA",
+                              "LIBERADA"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "pecaId",
+                          "nome",
+                          "quantidade",
+                          "precoUnitario",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "historico": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "statusAnterior": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "statusNovo": {
+                            "type": "string"
+                          },
+                          "observacao": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "criadoEm": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "statusAnterior",
+                          "statusNovo",
+                          "observacao",
+                          "criadoEm"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "ordemId",
+                    "sagaId",
+                    "numeroOS",
+                    "status",
+                    "descricao",
+                    "veiculoPlaca",
+                    "veiculoMarca",
+                    "veiculoModelo",
+                    "veiculoAno",
+                    "observacaoDiagnostico",
+                    "motivoEncerramento",
+                    "tempoRealMin",
+                    "diagnosticoIniciadoEm",
+                    "diagnosticadaEm",
+                    "liberadaEm",
+                    "reparoIniciadoEm",
+                    "finalizadaEm",
+                    "encerradaEm",
+                    "criadoEm",
+                    "atualizadoEm",
+                    "servicos",
+                    "reservas",
+                    "historico"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execucoes/{id}/reparo/iniciar": {
+      "post": {
+        "summary": "Iniciar reparo",
+        "tags": [
+          "Fila de execução"
+        ],
+        "description": "Permitido depois do pagamento. Consome as peças reservadas.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "ordemId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "sagaId": {
+                      "type": "string"
+                    },
+                    "numeroOS": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoPlaca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoMarca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoModelo": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoAno": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "observacaoDiagnostico": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "motivoEncerramento": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "tempoRealMin": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "diagnosticoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "diagnosticadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "liberadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "reparoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "finalizadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "encerradaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "servicos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "servicoId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "preco": {
+                            "type": "number"
+                          },
+                          "tempoReal": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "servicoId",
+                          "nome",
+                          "preco",
+                          "tempoReal"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "reservas": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "pecaId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "quantidade": {
+                            "type": "integer"
+                          },
+                          "precoUnitario": {
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "RESERVADA",
+                              "CONSUMIDA",
+                              "LIBERADA"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "pecaId",
+                          "nome",
+                          "quantidade",
+                          "precoUnitario",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "historico": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "statusAnterior": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "statusNovo": {
+                            "type": "string"
+                          },
+                          "observacao": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "criadoEm": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "statusAnterior",
+                          "statusNovo",
+                          "observacao",
+                          "criadoEm"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "ordemId",
+                    "sagaId",
+                    "numeroOS",
+                    "status",
+                    "descricao",
+                    "veiculoPlaca",
+                    "veiculoMarca",
+                    "veiculoModelo",
+                    "veiculoAno",
+                    "observacaoDiagnostico",
+                    "motivoEncerramento",
+                    "tempoRealMin",
+                    "diagnosticoIniciadoEm",
+                    "diagnosticadaEm",
+                    "liberadaEm",
+                    "reparoIniciadoEm",
+                    "finalizadaEm",
+                    "encerradaEm",
+                    "criadoEm",
+                    "atualizadoEm",
+                    "servicos",
+                    "reservas",
+                    "historico"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execucoes/{id}/reparo/finalizar": {
+      "post": {
+        "summary": "Finalizar reparo",
+        "tags": [
+          "Fila de execução"
+        ],
+        "description": "Sem tempoRealMin, usa o tempo desde o início do reparo.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tempoRealMin": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "ordemId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "sagaId": {
+                      "type": "string"
+                    },
+                    "numeroOS": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoPlaca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoMarca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoModelo": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoAno": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "observacaoDiagnostico": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "motivoEncerramento": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "tempoRealMin": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "diagnosticoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "diagnosticadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "liberadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "reparoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "finalizadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "encerradaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "servicos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "servicoId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "preco": {
+                            "type": "number"
+                          },
+                          "tempoReal": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "servicoId",
+                          "nome",
+                          "preco",
+                          "tempoReal"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "reservas": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "pecaId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "quantidade": {
+                            "type": "integer"
+                          },
+                          "precoUnitario": {
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "RESERVADA",
+                              "CONSUMIDA",
+                              "LIBERADA"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "pecaId",
+                          "nome",
+                          "quantidade",
+                          "precoUnitario",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "historico": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "statusAnterior": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "statusNovo": {
+                            "type": "string"
+                          },
+                          "observacao": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "criadoEm": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "statusAnterior",
+                          "statusNovo",
+                          "observacao",
+                          "criadoEm"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "ordemId",
+                    "sagaId",
+                    "numeroOS",
+                    "status",
+                    "descricao",
+                    "veiculoPlaca",
+                    "veiculoMarca",
+                    "veiculoModelo",
+                    "veiculoAno",
+                    "observacaoDiagnostico",
+                    "motivoEncerramento",
+                    "tempoRealMin",
+                    "diagnosticoIniciadoEm",
+                    "diagnosticadaEm",
+                    "liberadaEm",
+                    "reparoIniciadoEm",
+                    "finalizadaEm",
+                    "encerradaEm",
+                    "criadoEm",
+                    "atualizadoEm",
+                    "servicos",
+                    "reservas",
+                    "historico"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execucoes/{id}/falha": {
+      "post": {
+        "summary": "Registrar falha na execução",
+        "tags": [
+          "Fila de execução"
+        ],
+        "description": "Encerra a execução, devolve peças ainda reservadas e dispara a compensação da saga (estorno do pagamento e cancelamento da OS).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "motivo": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "motivo"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "ordemId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "sagaId": {
+                      "type": "string"
+                    },
+                    "numeroOS": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoPlaca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoMarca": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoModelo": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "veiculoAno": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "observacaoDiagnostico": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "motivoEncerramento": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "tempoRealMin": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "diagnosticoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "diagnosticadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "liberadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "reparoIniciadoEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "finalizadaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "encerradaEm": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "servicos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "servicoId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "preco": {
+                            "type": "number"
+                          },
+                          "tempoReal": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "servicoId",
+                          "nome",
+                          "preco",
+                          "tempoReal"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "reservas": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "pecaId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "quantidade": {
+                            "type": "integer"
+                          },
+                          "precoUnitario": {
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "RESERVADA",
+                              "CONSUMIDA",
+                              "LIBERADA"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "pecaId",
+                          "nome",
+                          "quantidade",
+                          "precoUnitario",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "historico": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "statusAnterior": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "statusNovo": {
+                            "type": "string"
+                          },
+                          "observacao": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "criadoEm": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "statusAnterior",
+                          "statusNovo",
+                          "observacao",
+                          "criadoEm"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "ordemId",
+                    "sagaId",
+                    "numeroOS",
+                    "status",
+                    "descricao",
+                    "veiculoPlaca",
+                    "veiculoMarca",
+                    "veiculoModelo",
+                    "veiculoAno",
+                    "observacaoDiagnostico",
+                    "motivoEncerramento",
+                    "tempoRealMin",
+                    "diagnosticoIniciadoEm",
+                    "diagnosticadaEm",
+                    "liberadaEm",
+                    "reparoIniciadoEm",
+                    "finalizadaEm",
+                    "encerradaEm",
+                    "criadoEm",
+                    "atualizadoEm",
+                    "servicos",
+                    "reservas",
+                    "historico"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/servicos/": {
+      "post": {
+        "summary": "Cadastrar serviço",
+        "tags": [
+          "Catálogo de serviços"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nome": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "descricao": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "preco": {
+                    "type": "number",
+                    "exclusiveMinimum": true,
+                    "minimum": 0
+                  },
+                  "tempoPrevisto": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "nome",
+                  "preco"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "nome": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "preco": {
+                      "type": "number"
+                    },
+                    "tempoPrevisto": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "ativo": {
+                      "type": "boolean"
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "nome",
+                    "preco",
+                    "tempoPrevisto",
+                    "ativo",
+                    "criadoEm",
+                    "atualizadoEm"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Listar serviços",
+        "tags": [
+          "Catálogo de serviços"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "minimum": 0,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "minimum": 0,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "busca",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "descricao": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "preco": {
+                            "type": "number"
+                          },
+                          "tempoPrevisto": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "ativo": {
+                            "type": "boolean"
+                          },
+                          "criadoEm": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "atualizadoEm": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "nome",
+                          "preco",
+                          "tempoPrevisto",
+                          "ativo",
+                          "criadoEm",
+                          "atualizadoEm"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "totalPages": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "page",
+                        "limit",
+                        "total",
+                        "totalPages"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/servicos/{id}": {
+      "get": {
+        "summary": "Buscar serviço",
+        "tags": [
+          "Catálogo de serviços"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "nome": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "preco": {
+                      "type": "number"
+                    },
+                    "tempoPrevisto": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "ativo": {
+                      "type": "boolean"
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "nome",
+                    "preco",
+                    "tempoPrevisto",
+                    "ativo",
+                    "criadoEm",
+                    "atualizadoEm"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Atualizar serviço",
+        "tags": [
+          "Catálogo de serviços"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nome": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "descricao": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "preco": {
+                    "type": "number",
+                    "exclusiveMinimum": true,
+                    "minimum": 0
+                  },
+                  "tempoPrevisto": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "nome": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "preco": {
+                      "type": "number"
+                    },
+                    "tempoPrevisto": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "ativo": {
+                      "type": "boolean"
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "nome",
+                    "preco",
+                    "tempoPrevisto",
+                    "ativo",
+                    "criadoEm",
+                    "atualizadoEm"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Desativar serviço",
+        "tags": [
+          "Catálogo de serviços"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/servicos/{id}/tempo-medio": {
+      "get": {
+        "summary": "Tempo médio real de execução do serviço",
+        "tags": [
+          "Catálogo de serviços"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tempoMedio": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "totalExecucoes": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "tempoMedio",
+                    "totalExecucoes"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pecas/": {
+      "post": {
+        "summary": "Cadastrar peça",
+        "tags": [
+          "Estoque de peças"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nome": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "descricao": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "preco": {
+                    "type": "number",
+                    "exclusiveMinimum": true,
+                    "minimum": 0
+                  },
+                  "quantidade": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "default": 0
+                  },
+                  "estoqueMin": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "default": 0
+                  },
+                  "unidade": {
+                    "type": "string",
+                    "maxLength": 10,
+                    "default": "un"
+                  }
+                },
+                "required": [
+                  "nome",
+                  "preco"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "nome": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "preco": {
+                      "type": "number"
+                    },
+                    "quantidade": {
+                      "type": "integer"
+                    },
+                    "estoqueMin": {
+                      "type": "integer"
+                    },
+                    "unidade": {
+                      "type": "string"
+                    },
+                    "ativo": {
+                      "type": "boolean"
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "nome",
+                    "preco",
+                    "quantidade",
+                    "estoqueMin",
+                    "unidade",
+                    "ativo",
+                    "criadoEm",
+                    "atualizadoEm"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Listar peças",
+        "tags": [
+          "Estoque de peças"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "minimum": 0,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "minimum": 0,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "busca",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "nome": {
+                            "type": "string"
+                          },
+                          "descricao": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "preco": {
+                            "type": "number"
+                          },
+                          "quantidade": {
+                            "type": "integer"
+                          },
+                          "estoqueMin": {
+                            "type": "integer"
+                          },
+                          "unidade": {
+                            "type": "string"
+                          },
+                          "ativo": {
+                            "type": "boolean"
+                          },
+                          "criadoEm": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "atualizadoEm": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "estoqueBaixo": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "nome",
+                          "preco",
+                          "quantidade",
+                          "estoqueMin",
+                          "unidade",
+                          "ativo",
+                          "criadoEm",
+                          "atualizadoEm",
+                          "estoqueBaixo"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "totalPages": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "page",
+                        "limit",
+                        "total",
+                        "totalPages"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pecas/alertas-estoque": {
+      "get": {
+        "summary": "Peças no estoque mínimo ou abaixo dele",
+        "tags": [
+          "Estoque de peças"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "nome": {
+                        "type": "string"
+                      },
+                      "quantidade": {
+                        "type": "integer"
+                      },
+                      "estoqueMin": {
+                        "type": "integer"
+                      },
+                      "unidade": {
+                        "type": "string"
+                      },
+                      "deficit": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "nome",
+                      "quantidade",
+                      "estoqueMin",
+                      "unidade",
+                      "deficit"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pecas/{id}": {
+      "get": {
+        "summary": "Buscar peça",
+        "tags": [
+          "Estoque de peças"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "nome": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "preco": {
+                      "type": "number"
+                    },
+                    "quantidade": {
+                      "type": "integer"
+                    },
+                    "estoqueMin": {
+                      "type": "integer"
+                    },
+                    "unidade": {
+                      "type": "string"
+                    },
+                    "ativo": {
+                      "type": "boolean"
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "nome",
+                    "preco",
+                    "quantidade",
+                    "estoqueMin",
+                    "unidade",
+                    "ativo",
+                    "criadoEm",
+                    "atualizadoEm"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Atualizar peça (o estoque muda só pelo ajuste)",
+        "tags": [
+          "Estoque de peças"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nome": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 200
+                  },
+                  "descricao": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "preco": {
+                    "type": "number",
+                    "exclusiveMinimum": true,
+                    "minimum": 0
+                  },
+                  "estoqueMin": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "default": 0
+                  },
+                  "unidade": {
+                    "type": "string",
+                    "maxLength": 10,
+                    "default": "un"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "nome": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "preco": {
+                      "type": "number"
+                    },
+                    "quantidade": {
+                      "type": "integer"
+                    },
+                    "estoqueMin": {
+                      "type": "integer"
+                    },
+                    "unidade": {
+                      "type": "string"
+                    },
+                    "ativo": {
+                      "type": "boolean"
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "nome",
+                    "preco",
+                    "quantidade",
+                    "estoqueMin",
+                    "unidade",
+                    "ativo",
+                    "criadoEm",
+                    "atualizadoEm"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Desativar peça",
+        "tags": [
+          "Estoque de peças"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pecas/{id}/estoque": {
+      "patch": {
+        "summary": "Ajustar estoque",
+        "tags": [
+          "Estoque de peças"
+        ],
+        "description": "Valor positivo para entrada, negativo para saída. Nunca deixa o saldo negativo.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "quantidade": {
+                    "type": "integer"
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "quantidade"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "nome": {
+                      "type": "string"
+                    },
+                    "descricao": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "preco": {
+                      "type": "number"
+                    },
+                    "quantidade": {
+                      "type": "integer"
+                    },
+                    "estoqueMin": {
+                      "type": "integer"
+                    },
+                    "unidade": {
+                      "type": "string"
+                    },
+                    "ativo": {
+                      "type": "boolean"
+                    },
+                    "criadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "atualizadoEm": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "nome",
+                    "preco",
+                    "quantidade",
+                    "estoqueMin",
+                    "unidade",
+                    "ativo",
+                    "criadoEm",
+                    "atualizadoEm"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "statusCode",
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Fila de execução"
+    },
+    {
+      "name": "Catálogo de serviços"
+    },
+    {
+      "name": "Estoque de peças"
+    },
+    {
+      "name": "Saúde"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "name": "oficina-execucao",
+  "version": "1.0.0",
+  "description": "Execução e Produção — fila de diagnóstico e reparo, catálogo de serviços e estoque de peças",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:prod": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"prisma/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"prisma/**/*.ts\"",
+    "openapi:export": "tsx scripts/export-openapi.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@fastify/jwt": "^8.0.1",
+    "@fastify/swagger": "^8.14.0",
+    "@fastify/swagger-ui": "^4.0.1",
+    "@prisma/client": "^5.22.0",
+    "amqplib": "^2.3.1",
+    "dotenv": "^17.4.2",
+    "fastify": "^4.28.1",
+    "fastify-type-provider-zod": "^2.0.0",
+    "newrelic": "^12.25.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/newrelic": "^9.14.8",
+    "@types/node": "^24.19.2",
+    "@vitest/coverage-v8": "^2.1.8",
+    "prettier": "^3.9.5",
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}
