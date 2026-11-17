@@ -1,0 +1,354 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main, homolog]
+  push:
+    branches: [main, homolog]
+  workflow_dispatch:
+
+concurrency:
+  group: execucao-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  NODE_VERSION: "24"
+  APP_ENV: ${{ github.ref_name == 'main' && 'prod' || 'homolog' }}
+
+jobs:
+  test:
+    name: Build & Testes
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: oficina
+          POSTGRES_PASSWORD: oficina_ci
+          POSTGRES_DB: execucao_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U oficina -d execucao_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://oficina:oficina_ci@localhost:5432/execucao_db
+      JWT_SECRET: chave-apenas-para-ci-com-mais-de-32-caracteres
+      PORT: 3000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Verificar formatação
+        run: npm run format:check
+
+      - name: Gerar Prisma Client
+        run: npx prisma generate
+
+      - name: Aplicar migrations
+        run: npx prisma migrate deploy
+
+      - name: Verificar tipos
+        run: npm run typecheck
+
+      - name: Compilar TypeScript
+        run: npm run build
+
+      - name: Testes unitários e de integração (cobertura mínima de 80%)
+        run: npm test
+
+      - name: Catálogo inicial no banco de teste
+        run: npx prisma db seed
+
+      - name: Exportar especificação OpenAPI
+        run: npm run openapi:export
+
+      - name: Publicar cobertura
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+      - name: Publicar OpenAPI
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: openapi
+          path: docs/openapi.json
+          retention-days: 30
+
+  qualidade:
+    name: Qualidade (SonarQube Cloud)
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Baixar cobertura
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: coverage
+          path: coverage
+
+      - name: Conferir configuração do Sonar
+        id: sonar
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "::error::SONAR_TOKEN não configurado. A verificação de qualidade é obrigatória: crie o projeto no SonarQube Cloud e cadastre o token em Settings → Secrets."
+            exit 1
+          fi
+          org="${SONAR_ORGANIZATION:-$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')}"
+          echo "org=$org" >> "$GITHUB_OUTPUT"
+          echo "chave=${SONAR_PROJECT_KEY:-${org}_${GITHUB_REPOSITORY#*/}}" >> "$GITHUB_OUTPUT"
+
+      - name: Análise e quality gate
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL || 'https://sonarcloud.io' }}
+        with:
+          args: >
+            -Dsonar.organization=${{ steps.sonar.outputs.org }}
+            -Dsonar.projectKey=${{ steps.sonar.outputs.chave }}
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=300
+
+  docker:
+    name: Build & Push da imagem (ECR)
+    runs-on: ubuntu-latest
+    needs: [test, qualidade]
+    if: github.event_name != 'pull_request'
+
+    outputs:
+      image_ref: ${{ steps.ref.outputs.image }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verificar se as credenciais do lab ainda são válidas
+        run: |
+          if ! aws sts get-caller-identity; then
+            echo "::error::Credenciais AWS expiradas. Atualize os secrets a partir de AWS Details -> AWS CLI no Learner Lab."
+            exit 1
+          fi
+
+      - name: Descobrir repositório ECR
+        id: ecr
+        run: |
+          if ! URL=$(aws ssm get-parameter --name "/oficina/${APP_ENV}/ecr/execucao_repository_url" --query Parameter.Value --output text 2>/dev/null); then
+            echo "::error::Repositório ECR não encontrado. Aplique oficina-infra-k8s antes deste pipeline."
+            exit 1
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Login no Amazon ECR
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Build e push
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: .
+          target: runner
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.url }}:sha-${{ github.sha }}
+            ${{ steps.ecr.outputs.url }}:${{ env.APP_ENV }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Expor referência imutável da imagem
+        id: ref
+        run: echo "image=${{ steps.ecr.outputs.url }}:sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy no EKS (${{ github.ref_name == 'main' && 'prod' || 'homolog' }})
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.event_name != 'pull_request'
+
+    environment:
+      name: ${{ github.ref_name == 'main' && 'prod' || 'homolog' }}
+      url: ${{ steps.endpoint.outputs.url }}
+
+    env:
+      IMAGE_REF: ${{ needs.docker.outputs.image_ref }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verificar dependências entre stacks
+        run: |
+          faltando=""
+          for p in \
+            "/oficina/${APP_ENV}/eks/cluster_name" \
+            "/oficina/${APP_ENV}/db/execucao_database_url" \
+            "/oficina/${APP_ENV}/mensageria/rabbitmq_url" \
+            "/oficina/${APP_ENV}/auth/jwt_secret"
+          do
+            aws ssm get-parameter --name "$p" >/dev/null 2>&1 || faltando="$faltando\n  - $p"
+          done
+          if [ -n "$faltando" ]; then
+            echo -e "::error::Parâmetros ausentes no SSM:$faltando\n\nAplique oficina-infra-k8s e oficina-infra-db e faça o primeiro deploy do OS Service (que publica os segredos de autenticação)."
+            exit 1
+          fi
+
+      - name: Configurar kubectl
+        run: |
+          CLUSTER=$(aws ssm get-parameter --name "/oficina/${APP_ENV}/eks/cluster_name" --query Parameter.Value --output text)
+          echo "CLUSTER=$CLUSTER" >> "$GITHUB_ENV"
+          aws eks update-kubeconfig --region "${AWS_REGION}" --name "$CLUSTER"
+
+      - name: Aplicar namespace e configuração
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/configmap.yaml
+
+      - name: Criar/atualizar Secret
+        run: |
+          ler() { aws ssm get-parameter --name "/oficina/${APP_ENV}/$1" --with-decryption --query Parameter.Value --output text; }
+          kubectl create secret generic oficina-execucao-secret \
+            --namespace=oficina \
+            --from-literal=DATABASE_URL="$(ler db/execucao_database_url)" \
+            --from-literal=RABBITMQ_URL="$(ler mensageria/rabbitmq_url)" \
+            --from-literal=JWT_SECRET="$(ler auth/jwt_secret)" \
+            --from-literal=NEW_RELIC_LICENSE_KEY="${{ secrets.NEW_RELIC_LICENSE_KEY }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy do serviço de execução
+        run: |
+          sed -e "s|DOCKER_IMAGE_PLACEHOLDER|$IMAGE_REF|g" \
+              -e "s|APP_VERSION_PLACEHOLDER|$GITHUB_SHA|g" \
+              k8s/deployment.yaml | kubectl apply -f -
+          kubectl apply -f k8s/service.yaml
+          kubectl apply -f k8s/hpa.yaml
+          kubectl rollout status deployment/oficina-execucao -n oficina --timeout=300s
+
+      - name: Garantir o catálogo inicial
+        run: |
+          kubectl delete job/oficina-execucao-catalogo -n oficina --ignore-not-found
+          sed -e "s|DOCKER_IMAGE_PLACEHOLDER|$IMAGE_REF|g" k8s/job-catalogo.yaml | kubectl apply -f -
+          kubectl wait --for=condition=complete job/oficina-execucao-catalogo -n oficina --timeout=180s
+          kubectl logs job/oficina-execucao-catalogo -n oficina
+
+      - name: Aguardar o Load Balancer receber endereço
+        id: endpoint
+        run: |
+          for _ in $(seq 1 60); do
+            HOST=$(kubectl get svc oficina-execucao -n oficina \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            [ -n "$HOST" ] && break
+            sleep 10
+          done
+          if [ -z "$HOST" ]; then
+            echo "::error::O Service não recebeu endereço externo em 10 minutos."
+            kubectl describe svc oficina-execucao -n oficina
+            exit 1
+          fi
+          echo "host=$HOST" >> "$GITHUB_OUTPUT"
+          echo "url=http://$HOST" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar endereço no SSM
+        run: |
+          aws ssm put-parameter --name "/oficina/${APP_ENV}/execucao/endpoint" \
+            --value "${{ steps.endpoint.outputs.host }}" --type String --overwrite >/dev/null
+
+      - name: Smoke test do ambiente publicado
+        run: |
+          url="${{ steps.endpoint.outputs.url }}"
+          for _ in $(seq 1 30); do
+            codigo=$(curl -sS -o /tmp/ready.json -w '%{http_code}' "$url/health/ready" --max-time 10 || echo 000)
+            [ "$codigo" = "200" ] && break
+            sleep 10
+          done
+          cat /tmp/ready.json || true
+          if [ "$codigo" != "200" ]; then
+            echo "::error::/health/ready não respondeu 200 (recebido $codigo)."
+            kubectl logs -n oficina -l app=oficina-execucao --tail=50
+            exit 1
+          fi
+          if ! jq -e '.dependencias.mensageria == "ok"' /tmp/ready.json >/dev/null; then
+            echo "::error::O serviço não se conectou ao RabbitMQ."
+            exit 1
+          fi
+          codigo=$(curl -sS -o /dev/null -w '%{http_code}' "$url/execucoes" --max-time 10)
+          if [ "$codigo" != "401" ]; then
+            echo "::error::Esperado 401 em /execucoes sem token, recebido $codigo"
+            exit 1
+          fi
+
+      - name: Registrar deploy no New Relic
+        continue-on-error: true
+        env:
+          NEW_RELIC_API_KEY: ${{ secrets.NEW_RELIC_API_KEY }}
+          NEW_RELIC_ACCOUNT_ID: ${{ secrets.NEW_RELIC_ACCOUNT_ID }}
+          NR_APP: oficina-execucao
+        run: bash scripts/marcar-deploy-newrelic.sh
+
+      - name: Resumo do deploy
+        run: |
+          {
+            echo "## Serviço de execução publicado no EKS"
+            echo ""
+            echo "| Item | Valor |"
+            echo "| --- | --- |"
+            echo "| Ambiente | \`${APP_ENV}\` |"
+            echo "| Cluster | \`${CLUSTER}\` |"
+            echo "| Imagem | \`${IMAGE_REF}\` |"
+            echo "| Swagger | ${{ steps.endpoint.outputs.url }}/docs |"
+            echo ""
+            echo '```'
+            kubectl get pods,hpa,svc -n oficina -l app=oficina-execucao
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

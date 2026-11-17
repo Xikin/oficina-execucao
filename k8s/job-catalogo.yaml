@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: oficina-execucao-catalogo
+  namespace: oficina
+  labels:
+    app.kubernetes.io/part-of: oficina
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: catalogo
+          image: DOCKER_IMAGE_PLACEHOLDER
+          command: ["node", "dist/seed.js"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: oficina-execucao-secret
+                  key: DATABASE_URL
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              memory: "256Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 100
+            capabilities:
+              drop: ["ALL"]

@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Servico {
+  id            String                @id @default(uuid())
+  nome          String
+  descricao     String?
+  preco         Decimal               @db.Decimal(10, 2)
+  tempoPrevisto Int?                  @map("tempo_previsto")
+  ativo         Boolean               @default(true)
+  criadoEm      DateTime              @default(now()) @map("criado_em")
+  atualizadoEm  DateTime              @updatedAt @map("atualizado_em")
+  itens         ItemServicoExecucao[]
+
+  @@index([ativo])
+  @@map("servicos")
+}
+
+model Peca {
+  id           String        @id @default(uuid())
+  nome         String
+  descricao    String?
+  preco        Decimal       @db.Decimal(10, 2)
+  quantidade   Int           @default(0)
+  estoqueMin   Int           @default(0) @map("estoque_min")
+  unidade      String        @default("un")
+  ativo        Boolean       @default(true)
+  criadoEm     DateTime      @default(now()) @map("criado_em")
+  atualizadoEm DateTime      @updatedAt @map("atualizado_em")
+  reservas     ReservaPeca[]
+
+  @@index([ativo])
+  @@map("pecas")
+}
+
+model Execucao {
+  id                    String                @id @default(uuid())
+  ordemId               String                @unique @map("ordem_id")
+  sagaId                String                @map("saga_id")
+  numeroOS              Int                   @map("numero_os")
+  status                StatusExecucao
+  descricao             String?
+  veiculoPlaca          String?               @map("veiculo_placa")
+  veiculoMarca          String?               @map("veiculo_marca")
+  veiculoModelo         String?               @map("veiculo_modelo")
+  veiculoAno            Int?                  @map("veiculo_ano")
+  observacaoDiagnostico String?               @map("observacao_diagnostico")
+  motivoEncerramento    String?               @map("motivo_encerramento")
+  tempoRealMin          Int?                  @map("tempo_real_min")
+  diagnosticoIniciadoEm DateTime?             @map("diagnostico_iniciado_em")
+  diagnosticadaEm       DateTime?             @map("diagnosticada_em")
+  liberadaEm            DateTime?             @map("liberada_em")
+  reparoIniciadoEm      DateTime?             @map("reparo_iniciado_em")
+  finalizadaEm          DateTime?             @map("finalizada_em")
+  encerradaEm           DateTime?             @map("encerrada_em")
+  criadoEm              DateTime              @default(now()) @map("criado_em")
+  atualizadoEm          DateTime              @updatedAt @map("atualizado_em")
+  servicos              ItemServicoExecucao[]
+  reservas              ReservaPeca[]
+  historico             HistoricoExecucao[]
+
+  @@index([status, criadoEm])
+  @@map("execucoes")
+}
+
+model ItemServicoExecucao {
+  id         String   @id @default(uuid())
+  execucaoId String   @map("execucao_id")
+  servicoId  String   @map("servico_id")
+  nome       String
+  preco      Decimal  @db.Decimal(10, 2)
+  tempoReal  Int?     @map("tempo_real")
+  execucao   Execucao @relation(fields: [execucaoId], references: [id], onDelete: Cascade)
+  servico    Servico  @relation(fields: [servicoId], references: [id])
+
+  @@index([execucaoId])
+  @@index([servicoId])
+  @@map("itens_servico_execucao")
+}
+
+model ReservaPeca {
+  id            String        @id @default(uuid())
+  execucaoId    String        @map("execucao_id")
+  pecaId        String        @map("peca_id")
+  nome          String
+  quantidade    Int
+  precoUnitario Decimal       @map("preco_unitario") @db.Decimal(10, 2)
+  status        StatusReserva @default(RESERVADA)
+  execucao      Execucao      @relation(fields: [execucaoId], references: [id], onDelete: Cascade)
+  peca          Peca          @relation(fields: [pecaId], references: [id])
+
+  @@index([execucaoId])
+  @@index([pecaId, status])
+  @@map("reservas_peca")
+}
+
+model HistoricoExecucao {
+  id             String          @id @default(uuid())
+  execucaoId     String          @map("execucao_id")
+  statusAnterior StatusExecucao? @map("status_anterior")
+  statusNovo     StatusExecucao  @map("status_novo")
+  observacao     String?
+  criadoEm       DateTime        @default(now()) @map("criado_em")
+  execucao       Execucao        @relation(fields: [execucaoId], references: [id], onDelete: Cascade)
+
+  @@index([execucaoId, criadoEm])
+  @@map("historico_execucao")
+}
+
+model Outbox {
+  id          String    @id
+  routingKey  String    @map("routing_key")
+  payload     Json
+  cabecalhos  Json      @default("{}")
+  tentativas  Int       @default(0)
+  criadoEm    DateTime  @default(now()) @map("criado_em")
+  publicadoEm DateTime? @map("publicado_em")
+
+  @@index([publicadoEm, criadoEm])
+  @@map("outbox")
+}
+
+model MensagemProcessada {
+  id           String   @id
+  consumidor   String
+  processadaEm DateTime @default(now()) @map("processada_em")
+
+  @@map("mensagens_processadas")
+}
+
+enum StatusExecucao {
+  NA_FILA
+  EM_DIAGNOSTICO
+  DIAGNOSTICADA
+  AGUARDANDO_REPARO
+  EM_REPARO
+  FINALIZADA
+  FALHOU
+  CANCELADA
+}
+
+enum StatusReserva {
+  RESERVADA
+  CONSUMIDA
+  LIBERADA
+}
